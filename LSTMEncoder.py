@@ -22,19 +22,34 @@ from lasagne import nonlinearities
 from lasagne import init
 from lasagne.utils import unroll_scan
 from lasagne.layers import MergeLayer, Layer, InputLayer, DenseLayer
-'''
+
 __all__ = [
     "CustomEmbedding",
     "CustomDense"
     "LSTMEncoder",
     "LSTMDecoder",
 ]
-'''
+
 _rng = np.random
 
 #This class is adopted from Lasagne's LSTMLayer(MergeLayer) class 
 #defined in: https://github.com/Lasagne/Lasagne/blob/master/lasagne/layers/recurrent.py
+#
 
+
+class CustomLSTMEncoder(lasagne.layers.LSTMLayer):
+
+    def __init__(self, incoming, num_units, ingate=Gate(), forgetgate=Gate(),
+                 cell=Gate(W_cell=None, nonlinearity=nonlinearities.tanh), outgate=Gate(),
+                 nonlinearity=nonlinearities.tanh, cell_init=init.Constant(0.), hid_init=init.Constant(0.),
+                 backwards=False, learn_init=False, peepholes=True, gradient_steps=-1, grad_clipping=0,
+                 unroll_scan=False, precompute_input=True, mask_input=None, **kwargs):
+        super(CustomLSTMEncoder, self).__init__(incoming, num_units, **kwargs)
+
+    def get_output_shape_for(self, input_shapes):
+        return super(CustomLSTMEncoder, self).get_output_shape_for(input_shapes)
+
+    def get_output_for(self, inputs, **kwargs):
         """
         Compute this layer's output function given a symbolic input variable
 
@@ -65,25 +80,6 @@ _rng = np.random
         layer_output : theano.TensorType
             Symbolic output variable.
         """
-
-
-class LSTMEncoder(lasagne.layers.LSTMLayer):
-
-    def __init__(self, incoming, num_units, ingate=Gate(), forgetgate=Gate(),
-                 cell=Gate(W_cell=None, nonlinearity=nonlinearities.tanh), outgate=Gate(),
-                 nonlinearity=nonlinearities.tanh, cell_init=init.Constant(0.), hid_init=init.Constant(0.),
-                 backwards=False, learn_init=False, peepholes=True, gradient_steps=-1, grad_clipping=0,
-                 unroll_scan=False, precompute_input=True, mask_input=None, **kwargs):
-        super(LSTMEncoder, self).__init__(incoming, num_units, ingate, forgetgate, cell, outgate, nonlinearity,
-                                                cell_init, hid_init, backwards, learn_init, peepholes, gradient_steps,
-                                                grad_clipping, unroll_scan, precompute_input, mask_input, False,
-                                                **kwargs)
-
-    def get_output_shape_for(self, input_shapes):
-        return super(LSTMEncoder, self).get_output_shape_for(input_shapes)
-
-    def get_output_for(self, inputs, **kwargs):
-
         # Retrieve the layer input
         input = inputs[0]
         # Retrieve the mask when it is supplied
@@ -254,5 +250,6 @@ class LSTMEncoder(lasagne.layers.LSTMLayer):
                 hid_out = hid_out[:, ::-1]
 
         return (hid_out, cell_out[-1])
+
 
 
