@@ -10,17 +10,63 @@ from lasagne import nonlinearities
 from lasagne import init
 from lasagne.utils import unroll_scan
 from lasagne.layers import MergeLayer, Layer, InputLayer, DenseLayer
-'''
+
 __all__ = [
     "CustomEmbedding",
     "CustomDense"
-    "LSTMEncoder",
-    "LSTMDecoder",
+    "CustomLSTMEncoder",
+    "CustomLSTMDecoder",
 ]
-'''
 _rng = np.random
 
 
+class CustomLSTMDecoder(lasagne.layers.LSTMLayer):
+
+    def __init__(self, incoming, num_units, ingate=Gate(), forgetgate=Gate(),
+                 cell=Gate(W_cell=None, nonlinearity=nonlinearities.tanh),
+                 outgate=Gate(),
+                 nonlinearity=nonlinearities.tanh, cell_init=init.Constant(0.),
+                 hid_init=init.Constant(0.),
+                 backwards=False, learn_init=False, peepholes=False, 
+                 gradient_steps=-1, grad_clipping=0,
+                 precompute_input=False, mask_input=None,
+                 encoder_mask_input=None, attention=True, word_by_word=True, 
+                 **kwargs):
+        super(CustomLSTMDecoder, self).__init__(incoming, num_units, **kwargs)
+        self.attention = attention
+        self.word_by_word = word_by_word
+        # encoder mask
+        self.encoder_mask_incoming_index = -1
+        if encoder_mask_input is not None:
+            self.input_layers.append(encoder_mask_input)
+            self.input_shapes.append(encoder_mask_input.output_shape)
+            self.encoder_mask_incoming_index = len(self.input_layers)-1
+        # check encoder
+        self.r_init = None
+        self.r_init = self.add_param(init.Constant(0.),
+                                     (1, num_units), name="r_init",
+                                     trainable=False, regularizable=False)
+        if self.word_by_word:
+            # rewrites
+            self.attention = True
+        if self.attention:
+            if not isinstance(encoder_mask_input, lasagne.layers.Layer):
+                raise ValueError('Attention mechnism needs encoder mask layer')
+            # initializes attention weights
+            self.W_y_attend = self.add_param(init.Normal(0.1), (num_units, num_units), 'W_y_attend')
+            self.W_h_attend = self.add_param(init.Normal(0.1), (num_units, num_units), 'W_h_attend')
+            # doesn't need transpose
+            self.w_attend = self.add_param(init.Normal(0.1), (num_units, 1), 'w_attend')
+            self.W_p_attend = self.add_param(init.Normal(0.1), (num_units, num_units), 'W_p_attend')
+            self.W_x_attend = self.add_param(init.Normal(0.1), (num_units, num_units), 'W_x_attend')
+            if self.word_by_word:
+                self.W_r_attend = self.add_param(init.Normal(0.1), (num_units, num_units), 'W_r_attend')
+                self.W_t_attend = self.add_param(init.Normal(0.1), (num_units, num_units), 'W_t_attend')
+
+    def get_output_shape_for(self, input_shapes):
+        return super(CustomLSTMDecoder, self).get_output_shape_for(input_shapes)
+
+    def get_output_for(self, inputs, **kwargs):
         """
         Compute this layer's output function given a symbolic input variable
 
@@ -51,53 +97,6 @@ _rng = np.random
         layer_output : theano.TensorType
             Symbolic output variable.
         """
-
-class LSTMDecoder(lasagne.layers.LSTMLayer):
-
-    def __init__(self, incoming, num_units, ingate=Gate(), forgetgate=Gate(),
-                 cell=Gate(W_cell=None, nonlinearity=nonlinearities.tanh), outgate=Gate(), nonlinearity=nonlinearities.tanh, cell_init=init.Constant(0.), hid_init=init.Constant(0.), backwards=False, learn_init=False, peepholes=True, gradient_steps=-1, grad_clipping=0, precompute_input=True, mask_input=None, encoder_mask_input=None, attention=False, word_by_word=False, **kwargs):
-        
-	super(LSTMDecoder, self).__init__(incoming, num_units, ingate, forgetgate, cell, outgate, nonlinearity, cell_init, hid_init, backwards, learn_init, peepholes, gradient_steps, grad_clipping, False, precompute_input, mask_input, True, **kwargs)
-        
-	self.attention = attention
-        self.word_by_word = word_by_word
-        # encoder mask
-        self.encoder_mask_incoming_index = -1
-        if encoder_mask_input is not None:
-            self.input_layers.append(encoder_mask_input)
-            self.input_shapes.append(encoder_mask_input.output_shape)
-            self.encoder_mask_incoming_index = len(self.input_layers)-1
-        # check encoder
-        if not isinstance(self.cell_init, LSTMEncoder) \
-                or self.num_units != self.cell_init.num_units:
-            raise ValueError('cell_init must be LSTMEncoder'
-                             ' and num_units should be equal')
-        self.r_init = None
-        self.r_init = self.add_param(init.Constant(0.),
-                                     (1, num_units), name="r_init",
-                                     trainable=False, regularizable=False)
-        if self.word_by_word:
-            # use attention
-            self.attention = True
-        if self.attention:
-            if not isinstance(encoder_mask_input, lasagne.layers.Layer):
-                raise ValueError('Attention needs encoder mask layer')
-            # initializes attention weights
-            self.W_y_attend = self.add_param(init.Normal(0.5), (num_units, num_units), 'W_y_attend')
-            self.W_h_attend = self.add_param(init.Normal(0.5), (num_units, num_units), 'W_h_attend')
-            # doesn't need transpose
-            self.w_attend = self.add_param(init.Normal(0.5), (num_units, 1), 'w_attend')
-            self.W_p_attend = self.add_param(init.Normal(0.5), (num_units, num_units), 'W_p_attend')
-            self.W_x_attend = self.add_param(init.Normal(0.5), (num_units, num_units), 'W_x_attend')
-            if self.word_by_word:
-                self.W_r_attend = self.add_param(init.Normal(0.5), (num_units, num_units), 'W_r_attend')
-                self.W_t_attend = self.add_param(init.Normal(0.5), (num_units, num_units), 'W_t_attend')
-
-    def get_output_shape_for(self, input_shapes):
-        return super(LSTMDecoder, self).get_output_shape_for(input_shapes)
-
-    def get_output_for(self, inputs, **kwargs):
-
         # Retrieve the layer input
         input = inputs[0]
         # Retrieve the mask when it is supplied
@@ -189,8 +188,7 @@ class LSTMDecoder(lasagne.layers.LSTMLayer):
             forgetgate = self.nonlinearity_forgetgate(forgetgate)
             cell_input = self.nonlinearity_cell(cell_input)
 
-            # Compute new cell value #CHANGE cell TO c_t and cell_prev to c_tm1
-	    # CHANGE ingate to i_t
+            # Compute new cell value
             cell = forgetgate*cell_previous + ingate*cell_input
 
             if self.peepholes:
@@ -313,3 +311,5 @@ class LSTMDecoder(lasagne.layers.LSTMLayer):
                 r_N = T.sum(encoder_hs * alpha, axis=1)
             out = nonlinearities.tanh(T.dot(r_N, self.W_p_attend) + T.dot(hid_N, self.W_x_attend))
         return out
+
+
