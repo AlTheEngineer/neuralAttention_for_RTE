@@ -1,0 +1,68 @@
+# -*- coding: utf-8 -*-
+
+# Created by junfeng on 5/12/16.
+
+# logging config
+import logging
+
+logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
+                    datefmt='%m/%d/%Y %I:%M:%S %p',
+                    level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+import numpy as np
+
+import theano
+import theano.tensor as T
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+
+import lasagne
+from lasagne.layers import Gate
+from lasagne import nonlinearities
+from lasagne import init
+from lasagne.utils import unroll_scan
+from lasagne.layers import MergeLayer, Layer, InputLayer, DenseLayer
+
+__all__ = [
+    "CustomEmbedding",
+    "DenseLayer"
+    "LSTMEncoder",
+    "LSTMDecoder",
+]
+
+_rng = np.random
+
+
+#LSTM units
+class DenseLayer(lasagne.layers.Layer):
+    # layer params initialized in constructor
+    def __init__(self, incoming, num_units, W=init.GlorotUniform(),
+                 b=init.Constant(0.), nonlinearity=nonlinearities.rectify,
+                 **kwargs):
+        #refers to base class without explicit naming
+        super(DenseLayer, self).__init__(incoming, **kwargs)
+        # reLU activation function
+        self.nonlinearity = (nonlinearities.identity if nonlinearity is None
+                             else nonlinearity)
+
+        self.num_units = num_units #default(100)
+
+        num_inputs = self.input_shape[-1] #premise_max (83) or hypo_max (63)
+
+        self.W = self.add_param(W, (num_inputs, num_units), name="W")
+        if b is None:
+            self.b = None
+        else:
+            self.b = self.add_param(b, (num_units,), name="b",
+                                    regularizable=False)
+
+    def get_output_shape_for(self, input_shape):
+        return input_shape[:-1] + (self.num_units, )
+
+    def get_output_for(self, input, **kwargs):
+        # doesn't flatten
+        activation = T.dot(input, self.W)
+        if self.b is not None:
+            activation = activation + self.b.dimshuffle('x', 'x', 0)
+        return self.nonlinearity(activation)
+
