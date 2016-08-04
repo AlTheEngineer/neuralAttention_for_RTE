@@ -16,7 +16,9 @@ import theano.tensor as T
 import lasagne
 import time
 
-from custom_layers import CustomEmbedding, CustomLSTMEncoder, CustomDense, CustomLSTMDecoder
+from custom_layers import CustomEmbedding, CustomDense
+from LSTMEncoder import CustomLSTMEncoder
+from LSTMDecoder import CustomLSTMDecoder
 
 
 # In[2]:
@@ -76,7 +78,7 @@ def prepare(df):
 # In[3]:
 
 print('Loading data ...')
-train_df, dev_df, test_df = (None, None, None)
+train_df, val_df, test_df = (None, None, None)
 #TRAINING SET (see data processing.py for details)
 with open('./snli/converted_train.pkl', 'rb') as f:
     print('Loading training set ...')
@@ -91,16 +93,16 @@ with open('./snli/converted_train.pkl', 'rb') as f:
     train_df = train_df.reset_index()
     print(len(train_df)) #size of label-filtered training set
 #VALIDATION SET (similar to what we did for training set)
-with open('./snli/converted_dev.pkl', 'rb') as f:
+with open('./snli/converted_val.pkl', 'rb') as f:
     print('Loading validation set ...')
-    dev_df = pickle.load(f)
-    print(len(dev_df))
-    filtered_s2 = dev_df.sentence2.apply(lambda s2: len(s2) != 0)
-    dev_df = dev_df[filtered_s2]
-    print(len(dev_df))
-    dev_df = dev_df[dev_df.gold_label != '-']
-    dev_df = dev_df.reset_index()
-    print(len(dev_df))
+    val_df = pickle.load(f)
+    print(len(val_df))
+    filtered_s2 = val_df.sentence2.apply(lambda s2: len(s2) != 0)
+    val_df = val_df[filtered_s2]
+    print(len(val_df))
+    val_df = val_df[val_df.gold_label != '-']
+    val_df = val_df.reset_index()
+    print(len(val_df))
 #TEST SET (similar to what we did for training set)
 with open('./snli/converted_test.pkl', 'rb') as f:
     print('Loading test set ...')
@@ -136,7 +138,7 @@ def inputLayerSize(df):
     return (maxlen_p, maxlen_h)
 
 #number of units in input layers
-premise_max = np.max([inputLayerSize(train_df)[0], inputLayerSize(dev_df)[0], inputLayerSize(test_df)[0]])
+premise_max = np.max([inputLayerSize(train_df)[0], inputLayerSize(val_df)[0], inputLayerSize(test_df)[0]])
 
 hypothesis_max = np.max([inputLayerSize(train_df)[1], inputLayerSize(val_df)[1], inputLayerSize(test_df)[1]])
 
@@ -233,8 +235,8 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
         lasagne.layers.set_all_param_values(l_softmax, param_values) #spread params in network
 
     target_var = T.ivector('target_var') #true label
-#initialize dict index
-index = 0
+    #initialize dict index
+    index = 0
     # lasagne.layers.get_output produces a variable for the output of the net
     prediction = lasagne.layers.get_output(l_softmax, deterministic=False) #predicted label
     # The network output will have shape (n_batch, 3);
@@ -272,7 +274,7 @@ index = 0
     print("Training ...")
 
     print('train_df.shape: {0}'.format(train_df.shape))
-    print('dev_df.shape: {0}'.format(dev_df.shape))
+    print('val_df.shape: {0}'.format(val_df.shape))
     print('test_df.shape: {0}'.format(test_df.shape))
     try:
         # Finally, launch the training loop.
@@ -311,8 +313,8 @@ index = 0
             val_err = 0
             val_acc = 0
             val_batches = 0
-            for start_i in range(0, len(dev_df), batch_size):
-                batched_df = dev_df[start_i:start_i + batch_size]
+            for start_i in range(0, len(val_df), batch_size):
+                batched_df = val_df[start_i:start_i + batch_size]
                 ps, p_masks, hs, h_masks, labels = prepare(batched_df)
                 err, acc = val_fn(ps, p_masks, hs, h_masks, labels)
                 val_err += err
