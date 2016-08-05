@@ -1,6 +1,3 @@
-# coding: utf-8
-
-# In[1]:
 
 from __future__ import print_function
 
@@ -16,12 +13,12 @@ import theano.tensor as T
 import lasagne
 import time
 
-from custom_layers import CustomEmbedding, CustomDense
-from LSTMEncoder import CustomLSTMEncoder
-from LSTMDecoder import CustomLSTMDecoder
+from EmbeddedLayer import EmbeddedLayer
+from DenseLayer import DenseLayer
+from Encoder import Encoder
+from Decoder import Decoder
 
 
-# In[2]:
 #This function takes data set and prepares for model training
 def prepare(df):
     seqs_premise = []
@@ -74,8 +71,6 @@ def prepare(df):
             hypothesis_masks.astype('int32'),
             labels.astype('int32'))
 
-
-# In[3]:
 
 print('Loading data ...')
 train_df, val_df, test_df = (None, None, None)
@@ -143,8 +138,6 @@ premise_max = np.max([inputLayerSize(train_df)[0], inputLayerSize(val_df)[0], in
 hypothesis_max = np.max([inputLayerSize(train_df)[1], inputLayerSize(val_df)[1], inputLayerSize(test_df)[1]])
 
 
-# In[8]:
-
 def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
          display_freq=100,
          save_freq=1000,
@@ -195,11 +188,11 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
 
 
 #initialize embedded layer params
-    premise_embedding = CustomEmbedding(l_premise, unchanged_W, unchanged_W_shape,
+    premise_embedding = EmbeddedLayer(l_premise, unchanged_W, unchanged_W_shape,
                                         oov_in_train_W, oov_in_train_W_shape,
                                         p=p) # p is dropout rate
 # weights shared with premise_embedding
-    hypo_embedding = CustomEmbedding(l_hypo, unchanged_W=premise_embedding.unchanged_W,
+    hypo_embedding = EmbeddedLayer(l_hypo, unchanged_W=premise_embedding.unchanged_W,
                                      unchanged_W_shape=unchanged_W_shape,
                                      oov_in_train_W=premise_embedding.oov_in_train_W,
                                      oov_in_train_W_shape=oov_in_train_W_shape,
@@ -207,20 +200,20 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
                                      dropout_mask=premise_embedding.dropout_mask)
 
 
-    l_premise_linear = CustomDense(premise_embedding, k,
+    l_premise_linear = DenseLayer(premise_embedding, k,
                                    nonlinearity=lasagne.nonlinearities.linear)
-    l_hypo_linear = CustomDense(hypo_embedding, k,
+    l_hypo_linear = DenseLayer(hypo_embedding, k,
                                 W=l_premise_linear.W, b=l_premise_linear.b,
                                 nonlinearity=lasagne.nonlinearities.linear)
 
 
 
-    encoder = CustomLSTMEncoder(l_premise_linear, k, peepholes=False, mask_input=l_premise_mask)
-    decoder = CustomLSTMDecoder(l_hypo_linear, k, cell_init=encoder, peepholes=False, mask_input=l_hypo_mask,
+    encoder = Encoder(l_premise_linear, k, peepholes=False, mask_input=l_premise_mask)
+    decoder = Decoder(l_hypo_linear, k, cell_init=encoder, peepholes=False, 
+                                mask_input=l_hypo_mask,
                                 encoder_mask_input=l_premise_mask,
                                 attention=attention,
-                                word_by_word=word_by_word
-                                )
+                                word_by_word=word_by_word)
     if p > 0.:
         print('apply dropout rate {} to decoder'.format(p))
         decoder = lasagne.layers.DropoutLayer(decoder, p)
