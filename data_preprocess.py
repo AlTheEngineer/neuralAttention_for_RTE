@@ -114,11 +114,11 @@ oov_in_train_W = (rsg.rand(len(oov_words_in_train), word2vec.vector_size) - 0.5)
 #test
 #np.all([np.all(word2vec.syn0[i2] == unchanged_W[i1]) for i1, i2 in enumerate(inv_indices)])
 
-unchanged_W_fileName = 'unchanged_W.pkl'
+unchanged_W_fileName = 'snli/unchanged_W.pkl'
 with open(unchanged_W_fileName, 'wb') as f:
     pickle.dump(unchanged_W, f)
 
-oov_in_train_W_fileName = 'oov_in_train_W.pkl'
+oov_in_train_W_fileName = 'snli/oov_in_train_W.pkl'
 with open(oov_in_train_W_fileName, 'wb') as f:
     pickle.dump(oov_in_train_W, f)
 
@@ -161,16 +161,16 @@ converted_val = converted_val[saved_columns]
 converted_test = converted_test[saved_columns]
 
 #dump processed data sets into respective files
-converted_train_fileName = 'converted_train.pkl'
+converted_train_fileName = 'snli/converted_train.pkl'
 with open(converted_train_fileName, 'wb') as f:
     pickle.dump(converted_train, f)
 
 
-converted_val_fileName = 'converted_val.pkl'
+converted_val_fileName = 'snli/converted_val.pkl'
 with open(converted_val_fileName, 'wb') as f:
     pickle.dump(converted_val, f)
 
-converted_test_fileName = 'converted_test.pkl'
+converted_test_fileName = 'snli/converted_test.pkl'
 with open(converted_test_fileName, 'wb') as f:
     pickle.dump(converted_test, f)
 
