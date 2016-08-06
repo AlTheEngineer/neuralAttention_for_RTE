@@ -1,3 +1,6 @@
+# coding: utf-8
+
+# In[1]:
 
 from __future__ import print_function
 
@@ -13,58 +16,51 @@ import theano.tensor as T
 import lasagne
 import time
 
-from EmbeddedLayer import EmbeddedLayer
-from DenseLayer import DenseLayer
-from Encoder import Encoder
-from Decoder import Decoder
+from layers import EmbeddedLayer, Encoder, DenseLayer, Decoder
 
 
-#This function takes data set and prepares for model training
-def prepare(df):
+
+# prepare data for training
+def prepare(data):
     seqs_premise = []
     seqs_hypothesis = []
-    for cc in df['sentence1']:
+    for cc in data['sentence1']:
         seqs_premise.append(cc)
-    for cc in df['sentence2']:
+    for cc in data['sentence2']:
         seqs_hypothesis.append(cc)
     seqs_p = seqs_premise
     seqs_h = seqs_hypothesis
-#list of sentence lengths
-    lengths_p = [len(s) for s in seqs_p] 
+
+    lengths_p = [len(s) for s in seqs_p]
     lengths_h = [len(s) for s in seqs_h]
 
     n_samples = len(seqs_p)
-    maxlen_p = numpy.max(lengths_p) + 1 #premise feature dimension
-    maxlen_h = numpy.max(lengths_h) + 1 #hypothesis feature dimension
+    maxlen_p = numpy.max(lengths_p) + 1
+    maxlen_h = numpy.max(lengths_h) + 1
 
-    premise = numpy.zeros((n_samples, maxlen_p)) #premise set
-    hypothesis = numpy.zeros((n_samples, maxlen_h)) #hypothesis set
-
-    premise_masks = numpy.zeros((n_samples, maxlen_p)) 
+    premise = numpy.zeros((n_samples, maxlen_p))
+    hypothesis = numpy.zeros((n_samples, maxlen_h))
+    premise_masks = numpy.zeros((n_samples, maxlen_p))
     hypothesis_masks = numpy.zeros((n_samples, maxlen_h))
-
-    for idx, [s_t, s_h] in enumerate(zip(seqs_p, seqs_h)): #for each sample idx, prem, hypo
-        assert lengths_h[idx] == len(s_h) #make sure I didn't screw word indexing
+    for idx, [s_t, s_h] in enumerate(zip(seqs_p, seqs_h)):
+        assert lengths_h[idx] == len(s_h)
         premise[idx, :lengths_p[idx]] = s_t
         premise_masks[idx, :lengths_p[idx]] = 1
         hypothesis[idx, :lengths_h[idx]] = s_h
         hypothesis_masks[idx, :lengths_h[idx]] = 1
-    #initialize list of class labels
     labels = []
-    #label encoding
-    for gl in df['gold_label']:
+    for gl in data['gold_label']:
         if gl == 'entailment':
-            value = 2 #encode entailment label as 2
+            value = 2
         elif gl == 'contradiction':
-            value = 1 #encode contradiction label as 1
+            value = 1
         elif gl == 'neutral':
-            value = 0 #encode neutral label as 0
+            value = 0
         else:
             raise ValueError('unknown gold_label {0}'.format(gl))
-        labels.append(value) #append encoding to labels list
+        labels.append(value)
 
-    labels = np.array(labels) #convert to numpy array
-    #int32 for GPU compatability
+    labels = np.array(labels)
     return (premise.astype('int32'),
             premise_masks.astype('int32'),
             hypothesis.astype('int32'),
@@ -73,77 +69,51 @@ def prepare(df):
 
 
 print('Loading data ...')
-train_df, val_df, test_df = (None, None, None)
-#TRAINING SET (see data processing.py for details)
+train_data, val_data, test_data = (None, None, None)
 with open('./snli/converted_train.pkl', 'rb') as f:
     print('Loading training set ...')
-    train_df = pickle.load(f)
-    print(len(train_df)) #size of training set
-    #remove data samples with missing hypotheses
-    filtered_s2 = train_df.sentence2.apply(lambda s2: len(s2) != 0)
-    train_df = train_df[filtered_s2]
-    print(len(train_df)) #size of filtered training set
-    #remove data samples with missing labels
-    train_df = train_df[train_df.gold_label != '-'] 
-    train_df = train_df.reset_index()
-    print(len(train_df)) #size of label-filtered training set
-#VALIDATION SET (similar to what we did for training set)
-with open('./snli/converted_val.pkl', 'rb') as f:
+    train_data = pickle.load(f)
+    print(len(train_data))
+    filtered_s2 = train_data.sentence2.apply(lambda s2: len(s2) != 0)
+    train_data = train_data[filtered_s2]
+    print(len(train_data))
+    train_data = train_data[train_data.gold_label != '-']
+    train_data = train_data.reset_index()
+    print("Size of training set: "+str(len(train_data)))
+
+with open('./snli/converted_dev.pkl', 'rb') as f:
     print('Loading validation set ...')
-    val_df = pickle.load(f)
-    print(len(val_df))
-    filtered_s2 = val_df.sentence2.apply(lambda s2: len(s2) != 0)
-    val_df = val_df[filtered_s2]
-    print(len(val_df))
-    val_df = val_df[val_df.gold_label != '-']
-    val_df = val_df.reset_index()
-    print(len(val_df))
-#TEST SET (similar to what we did for training set)
+    val_data = pickle.load(f)
+    print(len(val_data))
+    filtered_s2 = val_data.sentence2.apply(lambda s2: len(s2) != 0)
+    val_data = val_data[filtered_s2]
+    print("Size of validation set: "+str(len(val_data)))
+    #remove samples with missing data
+    val_data = val_data[val_data.gold_label != '-']
+    val_data = val_data.reset_index()
+    print(len(val_data))
 with open('./snli/converted_test.pkl', 'rb') as f:
     print('Loading test set ...')
-    test_df = pickle.load(f)
-    print(len(test_df))
-    filtered_s2 = test_df.sentence2.apply(lambda s2: len(s2) != 0)
-    test_df = test_df[filtered_s2]
-    print(len(test_df))
-    test_df = test_df[test_df.gold_label != '-']
-    test_df = test_df.reset_index()
-    print(len(test_df))
+    test_data = pickle.load(f)
+    print(len(test_data))
+    filtered_s2 = test_data.sentence2.apply(lambda s2: len(s2) != 0)
+    test_data = test_data[filtered_s2]
+    print(len(test_data))
+    test_data = test_data[test_data.gold_label != '-']
+    test_data = test_data.reset_index()
+    print(len(test_data))
 
-# In[7]:
+premise_max = 82 + 1
+hypothesis_max = 62 + 1
 
-def inputLayerSize(df):
-    seqs_premise = []
-    seqs_hypothesis = []
-    for cc in df['sentence1']:
-        seqs_premise.append(cc)
-    for cc in df['sentence2']:
-        seqs_hypothesis.append(cc)
-    seqs_p = seqs_premise
-    seqs_h = seqs_hypothesis
-#list of sentence lengths
-    lengths_p = [len(s) for s in seqs_p] 
-    lengths_h = [len(s) for s in seqs_h]
-
-    n_samples = len(seqs_p)
-    maxlen_p = np.max(lengths_p) + 1 #premise feature dimension
-    maxlen_h = np.max(lengths_h) + 1 #hypothesis feature dimension
-
-    #int32 for GPU compatability
-    return (maxlen_p, maxlen_h)
-
-#number of units in input layers
-premise_max = np.max([inputLayerSize(train_df)[0], inputLayerSize(val_df)[0], inputLayerSize(test_df)[0]])
-
-hypothesis_max = np.max([inputLayerSize(train_df)[1], inputLayerSize(val_df)[1], inputLayerSize(test_df)[1]])
-
-
-def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
+def main(num_epochs=10, k=100, 
+	 batch_size=128,
          display_freq=100,
          save_freq=1000,
          load_previous=False,
          attention=True,
-         word_by_word=True, mode='word_by_word'):
+         word_by_word=True, 
+	 p=0, mode='word_by_word'):
     print('num_epochs: {}'.format(num_epochs))
     print('k: {}'.format(k))
     print('batch_size: {}'.format(batch_size))
@@ -153,7 +123,7 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
     print('attention: {}'.format(attention))
     print('word_by_word: {}'.format(word_by_word))
     save_filename = './snli/{}_model.npz'.format(mode)
-    print("Training network ...")
+    print("Building network ...")
     premise_var = T.imatrix('premise_var')
     premise_mask = T.imatrix('premise_mask')
     hypo_var = T.imatrix('hypo_var')
@@ -166,88 +136,65 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
     oov_in_train_W_shape = oov_in_train_W.shape
     print('unchanged_W.shape: {0}'.format(unchanged_W_shape))
     print('oov_in_train_W.shape: {0}'.format(oov_in_train_W_shape))
-    # best hypoparameters
-    p = 0.2 #dropout rate
+    # hyperparameters
     learning_rate = 0.001
-    # learning_rate = 0.0003
-    # l2_weight = 0.0003
-    l2_weight = 0. #l2 regularization
-
-#for TensorFlow adaptation
-#   l_premise = tf.placeholder(tf.int32, [None, premise_max], name="premise_var")
-#   l_premise_mask = tf.placeholder(tf.int32, [None, premise_max], name="premise_mask")
-
-#   l_hypo = tf.placeholder(tf.int32, [None, hypothesis_max], name="hypo_var")
-#   l_hypo_mask = tf.placeholder(tf.int32, [None, hypothesis_max], name="hypo_mask")
-
-
+    l2_weight = 0.
+#Input layers
     l_premise = lasagne.layers.InputLayer(shape=(None, premise_max), input_var=premise_var)
     l_premise_mask = lasagne.layers.InputLayer(shape=(None, premise_max), input_var=premise_mask)
     l_hypo = lasagne.layers.InputLayer(shape=(None, hypothesis_max), input_var=hypo_var)
     l_hypo_mask = lasagne.layers.InputLayer(shape=(None, hypothesis_max), input_var=hypo_mask)
-
-
-#initialize embedded layer params
+#Embedded layers
     premise_embedding = EmbeddedLayer(l_premise, unchanged_W, unchanged_W_shape,
                                         oov_in_train_W, oov_in_train_W_shape,
-                                        p=p) # p is dropout rate
-# weights shared with premise_embedding
+                                        p=p)
+#weights shared with premise_embedding
     hypo_embedding = EmbeddedLayer(l_hypo, unchanged_W=premise_embedding.unchanged_W,
                                      unchanged_W_shape=unchanged_W_shape,
                                      oov_in_train_W=premise_embedding.oov_in_train_W,
                                      oov_in_train_W_shape=oov_in_train_W_shape,
                                      p=p,
                                      dropout_mask=premise_embedding.dropout_mask)
-
-
+#Dense layers
     l_premise_linear = DenseLayer(premise_embedding, k,
                                    nonlinearity=lasagne.nonlinearities.linear)
     l_hypo_linear = DenseLayer(hypo_embedding, k,
                                 W=l_premise_linear.W, b=l_premise_linear.b,
                                 nonlinearity=lasagne.nonlinearities.linear)
 
-
-
     encoder = Encoder(l_premise_linear, k, peepholes=False, mask_input=l_premise_mask)
-    decoder = Decoder(l_hypo_linear, k, cell_init=encoder, peepholes=False, 
-                                mask_input=l_hypo_mask,
+#initialized with encoder final hidden state
+    decoder = Decoder(l_hypo_linear, k, cell_init=encoder, peepholes=False, mask_input=l_hypo_mask,
                                 encoder_mask_input=l_premise_mask,
                                 attention=attention,
                                 word_by_word=word_by_word)
     if p > 0.:
         print('apply dropout rate {} to decoder'.format(p))
         decoder = lasagne.layers.DropoutLayer(decoder, p)
-    l_softmax = lasagne.layers.DenseLayer(
-            decoder, num_units=3,
-            nonlinearity=lasagne.nonlinearities.softmax) # output layer with 3 units
-    if load_previous:
-        print('loading previous saved model ...')
-        # And load them again later on like this:
-        with np.load(save_filename) as f:
-            param_values = [f['arr_%d' % i] for i in range(len(f.files))] #load model params
-        lasagne.layers.set_all_param_values(l_softmax, param_values) #spread params in network
+    l_softmax = lasagne.layers.DenseLayer(decoder, 
+	    				  num_units=3,
+            nonlinearity=lasagne.nonlinearities.softmax)
+    target_var = T.ivector('target_var')
 
-    target_var = T.ivector('target_var') #true label
-    #initialize dict index
-    index = 0
-    # lasagne.layers.get_output produces a variable for the output of the net
-    prediction = lasagne.layers.get_output(l_softmax, deterministic=False) #predicted label
-    # The network output will have shape (n_batch, 3);
+#lasagne.layers.get_output produces a variable for the output of the net
+    prediction = lasagne.layers.get_output(l_softmax, deterministic=False)
+#The network output will have shape (n_batch, 3);
     loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
     cost = loss.mean()
     if l2_weight > 0.:
-        # apply l2 regularization
+       #apply l2 regularization
         print('apply l2 penalty to all layers, weight: {}'.format(l2_weight))
         regularized_layers = {encoder: l2_weight,
                               decoder: l2_weight}
         l2_penalty = lasagne.regularization.regularize_network_params(l_softmax,
                                                                       lasagne.regularization.l2) * l2_weight
         cost += l2_penalty
-    # Retrieve all parameters from the network
+#Retrieve all parameters from the network
     all_params = lasagne.layers.get_all_params(l_softmax, trainable=True)
-    # Compute adam updates for training
-    print("Computing parameter updates ...")
-    updates = lasagne.updates.adam(cost, all_params, learning_rate=learning_rate)
+#Compute adam updates for training
+    print("Computing updates ...")
+    updates = lasagne.updates.adam(cost, all_params, 
+					learning_rate=learning_rate)
 
     test_prediction = lasagne.layers.get_output(l_softmax, deterministic=True)
     test_loss = lasagne.objectives.categorical_crossentropy(test_prediction,
@@ -266,25 +213,25 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
                              [test_loss, test_acc])
     print("Training ...")
 
-    print('train_df.shape: {0}'.format(train_df.shape))
-    print('val_df.shape: {0}'.format(val_df.shape))
-    print('test_df.shape: {0}'.format(test_df.shape))
+    print('train_data.shape: {0}'.format(train_data.shape))
+    print('val_data.shape: {0}'.format(val_data.shape))
+    print('test_data.shape: {0}'.format(test_data.shape))
     try:
         # Finally, launch the training loop.
-        print("Starting training...")
-        # We iterate over epochs:
+        print("Training started...")
+        # iterate over epochs:
         for epoch in range(num_epochs):
-            # In each epoch, we do a full pass over the training data:
-            shuffled_train_df = train_df.reindex(np.random.permutation(train_df.index))
+            # In each epoch, do a full pass over the training data:
+            shuffled_train_data = train_data.reindex(np.random.permutation(train_data.index))
             train_err = 0
             train_acc = 0
             train_batches = 0
             start_time = time.time()
             display_at = time.time()
             save_at = time.time()
-            for start_i in range(0, len(shuffled_train_df), batch_size):
-                batched_df = shuffled_train_df[start_i:start_i + batch_size]
-                ps, p_masks, hs, h_masks, labels = prepare(batched_df)
+            for start_i in range(0, len(shuffled_train_data), batch_size):
+                batched_data = shuffled_train_data[start_i:start_i + batch_size]
+                ps, p_masks, hs, h_masks, labels = prepare(batched_data)
                 train_err += train_fn(ps, p_masks, hs, h_masks, labels)
                 err, acc = val_fn(ps, p_masks, hs, h_masks, labels)
                 train_acc += acc
@@ -306,9 +253,9 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
             val_err = 0
             val_acc = 0
             val_batches = 0
-            for start_i in range(0, len(val_df), batch_size):
-                batched_df = val_df[start_i:start_i + batch_size]
-                ps, p_masks, hs, h_masks, labels = prepare(batched_df)
+            for start_i in range(0, len(val_data), batch_size):
+                batched_data = val_data[start_i:start_i + batch_size]
+                ps, p_masks, hs, h_masks, labels = prepare(batched_data)
                 err, acc = val_fn(ps, p_masks, hs, h_masks, labels)
                 val_err += err
                 val_acc += acc
@@ -328,9 +275,9 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
             test_err = 0
             test_acc = 0
             test_batches = 0
-            for start_i in range(0, len(test_df), batch_size):
-                batched_df = test_df[start_i:start_i + batch_size]
-                ps, p_masks, hs, h_masks, labels = prepare(batched_df)
+            for start_i in range(0, len(test_data), batch_size):
+                batched_data = test_data[start_i:start_i + batch_size]
+                ps, p_masks, hs, h_masks, labels = prepare(batched_data)
                 err, acc = val_fn(ps, p_masks, hs, h_masks, labels)
                 test_err += err
                 test_acc += acc
@@ -354,8 +301,6 @@ def main(num_epochs=10, k=100, batch_size=128, #k is LSTM hidden size
     except KeyboardInterrupt:
         print('exit ...')
 
-
-# In[9]:
 
 if __name__ == '__main__':
     attention = True
@@ -381,5 +326,7 @@ if __name__ == '__main__':
          load_previous=False,
          attention=attention,
          word_by_word=word_by_word,
-         mode=mode)
+         mode=mode,
+	 p=0,
+	 )
 
